@@ -5,7 +5,7 @@ local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 
 -- Настройки
-local TOGGLE_KEY = Enum.KeyCode.RightControl -- Клавиша для переключения (можно поменять)
+local TOGGLE_KEY = Enum.KeyCode.LEFTALT -- Клавиша для переключения (можно поменять)
 local FILL_COLOR = Color3.fromRGB(255, 0, 0)
 local OUTLINE_COLOR = Color3.fromRGB(255, 255, 255)
 
