@@ -1,49 +1,59 @@
+print("[ESP] Скрипт успешно запущен и начинает работу...")
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- Настройки внешнего вида
-local FILL_COLOR = Color3.fromRGB(255, 0, 0)     -- Цвет заливки (Красный)
-local OUTLINE_COLOR = Color3.fromRGB(255, 255, 255) -- Цвет контура (Белый)
-local FILL_TRANSPARENCY = 0.6                  -- Прозрачность тела (0 - яркий, 1 - невидимый)
-local OUTLINE_TRANSPARENCY = 0                 -- Прозрачность контура
+-- Если LocalPlayer еще не загрузился, ждем его
+if not LocalPlayer then
+    Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+    LocalPlayer = Players.LocalPlayer
+end
 
--- Функция создания подсветки для конкретного персонажа
+-- Настройки
+local FILL_COLOR = Color3.fromRGB(255, 0, 0)
+local OUTLINE_COLOR = Color3.fromRGB(255, 255, 255)
+
 local function applyESP(character, player)
-    -- Не подсвечиваем самого себя
     if player == LocalPlayer then return end
     
-    -- Ожидаем загрузки ключевой части тела
-    character:WaitForChild("HumanoidRootPart", 5)
+    -- Безопасное ожидание загрузки персонажа
+    local root = character:WaitForChild("HumanoidRootPart", 10)
+    if not root then 
+        print("[ESP] Предупреждение: Не удалось дождаться HumanoidRootPart для " .. player.Name)
+        return 
+    end
     
-    -- Удаляем старый ESP, если он был
-    local oldHighlight = character:FindFirstChild("ClientESP")
-    if oldHighlight then oldHighlight:Destroy() end
+    -- Удаляем старый ESP, если он остался
+    local old = character:FindFirstChild("ClientESP")
+    if old then old:Destroy() end
     
-    -- Создаем новую подсветку
+    -- Создаем подсветку
     local highlight = Instance.new("Highlight")
     highlight.Name = "ClientESP"
     highlight.FillColor = FILL_COLOR
-    highlight.FillTransparency = FILL_TRANSPARENCY
+    highlight.FillTransparency = 0.5
     highlight.OutlineColor = OUTLINE_COLOR
-    highlight.OutlineTransparency = OUTLINE_TRANSPARENCY
+    highlight.OutlineTransparency = 0
     highlight.Adornee = character
     highlight.Parent = character
+    
+    print("[ESP] Подсветка успешно создана для: " .. player.Name)
 end
 
--- Функция отслеживания игрока
 local function watchPlayer(player)
     if player.Character then
-        applyESP(player.Character, player)
+        task.spawn(applyESP, player.Character, player)
     end
     player.CharacterAdded:Connect(function(character)
-        applyESP(character, player)
+        task.spawn(applyESP, character, player)
     end)
 end
 
--- Запуск для текущих игроков в сервере
+-- Обрабатываем текущих игроков
 for _, player in ipairs(Players:GetPlayers()) do
     watchPlayer(player)
 end
 
--- Запуск для новых подключившихся игроков
+-- Слушаем новых игроков
 Players.PlayerAdded:Connect(watchPlayer)
+print("[ESP] Инициализация завершена. Ожидаем игроков...")
