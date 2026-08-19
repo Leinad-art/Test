@@ -1,4 +1,4 @@
--- ВЕРСИЯ ДЛЯ ИНЖЕКТОРОВ (EXPLOIT READ_ONLY)
+-- ВЕРСИЯ ДЛЯ ИНЖЕКТОРОВ С КНОПКОЙ СВЕРТЫВАНИЯ
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -19,29 +19,33 @@ local flyEnabled = false
 local noclipEnabled = false
 local flySpeed = 50
 
--- Защита от повторного запуска (удаляем старое меню, если оно было)
+-- Очистка старых интерфейсов перед запуском
 if CoreGui:FindFirstChild("ExploitMenuGui") then
 	CoreGui.ExploitMenuGui:Destroy()
 end
 
+-- Скандинавский UI контейнер
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ExploitMenuGui"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = CoreGui -- Специально для читов, чтобы меню не удалялось
+screenGui.Parent = CoreGui
 
+-- ГЛАВНАЯ ПАНЕЛЬ МЕНЮ
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 200, 0, 250)
 mainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
-mainFrame.Draggable = true -- В инжекторах старый Draggable обычно работает
+mainFrame.Draggable = true 
+mainFrame.Visible = true -- По умолчанию открыто
 mainFrame.Parent = screenGui
 
 local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0, 8)
 uiCorner.Parent = mainFrame
 
+-- Заголовок меню
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, 0, 0, 40)
 titleLabel.BackgroundTransparency = 1
@@ -51,6 +55,7 @@ titleLabel.Font = Enum.Font.SourceSansBold
 titleLabel.TextSize = 18
 titleLabel.Parent = mainFrame
 
+-- Функция сборщика кнопок
 local function createButton(text, position, color)
 	local button = Instance.new("TextButton")
 	button.Size = UDim2.new(0, 160, 0, 35)
@@ -92,12 +97,41 @@ local hintLabel = Instance.new("TextLabel")
 hintLabel.Size = UDim2.new(1, 0, 0, 30)
 hintLabel.Position = UDim2.new(0, 0, 1, -35)
 hintLabel.BackgroundTransparency = 1
-hintLabel.Text = "Клавиша [P] — скрыть меню"
+hintLabel.Text = "Клавиша [P] или кнопка 'M'"
 hintLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
 hintLabel.Font = Enum.Font.SourceSansItalic
-hintLabel.TextSize = 12
+hintLabel.TextSize = 11
 hintLabel.Parent = mainFrame
 
+
+-- ОТДЕЛЬНАЯ КНОПКА ВКЛЮЧЕНИЯ/ВЫКЛЮЧЕНИЯ (Toggle Button)
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 45, 0, 45)
+toggleButton.Position = UDim2.new(0.02, 0, 0.2, 0) -- В левом верхнем углу экрана
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleButton.BorderSizePixel = 0
+toggleButton.Text = "M" -- Буква М (Menu)
+toggleButton.TextColor3 = Color3.fromRGB(0, 200, 255) -- Красивый голубой цвет текста
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 22
+toggleButton.Active = true
+toggleButton.Draggable = true -- Кнопку переключателя тоже можно двигать, если мешает
+toggleButton.Parent = screenGui
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(1, 0) -- Скругление 100% делает кнопку идеально круглой
+toggleCorner.Parent = toggleButton
+
+-- Функция переключения видимости
+local function toggleMenu()
+	mainFrame.Visible = not mainFrame.Visible
+end
+
+-- Обработка клика по кнопке "M"
+toggleButton.MouseButton1Click:Connect(toggleMenu)
+
+
+-- ФУНКЦИОНАЛ ХАКОВ
 speedInput.FocusLost:Connect(function()
 	local numericValue = tonumber(speedInput.Text:match("%d+"))
 	if numericValue then flySpeed = numericValue end
@@ -165,5 +199,5 @@ end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.P then mainFrame.Visible = not mainFrame.Visible end
+	if input.KeyCode == Enum.KeyCode.P then toggleMenu() end
 end)
