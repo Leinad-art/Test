@@ -1,16 +1,14 @@
--- Улучшенный LocalScript для меню
-local Players = game:Service("Players")
-local RunService = game:Service("RunService")
-local UserInputService = game:Service("UserInputService")
+-- ВЕРСИЯ ДЛЯ ИНЖЕКТОРОВ (EXPLOIT READ_ONLY)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
--- Ждем полной загрузки игрока и интерфейса
 local player = Players.LocalPlayer
-if not player.Character then player.CharacterAdded:Wait() end
-local character = player.Character
+local character = player.Character or player.CharacterAdded:Wait()
 local root = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:WaitForChild("Humanoid")
 
--- Обновление при респавне
 player.CharacterAdded:Connect(function(newCharacter)
 	character = newCharacter
 	root = character:WaitForChild("HumanoidRootPart")
@@ -21,19 +19,23 @@ local flyEnabled = false
 local noclipEnabled = false
 local flySpeed = 50
 
--- СОЗДАНИЕ ИНТЕРФЕЙСА
+-- Защита от повторного запуска (удаляем старое меню, если оно было)
+if CoreGui:FindFirstChild("ExploitMenuGui") then
+	CoreGui.ExploitMenuGui:Destroy()
+end
+
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "CheatMenuGui"
+screenGui.Name = "ExploitMenuGui"
 screenGui.ResetOnSpawn = false
--- Защита от удаления при смене персонажа
-screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.Parent = CoreGui -- Специально для читов, чтобы меню не удалялось
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 200, 0, 250)
-mainFrame.Position = UDim2.new(0.05, 0, 0.3, 0) -- Чуть дальше от края экрана
+mainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
-mainFrame.Visible = true -- Принудительно делаем видимым
+mainFrame.Active = true
+mainFrame.Draggable = true -- В инжекторах старый Draggable обычно работает
 mainFrame.Parent = screenGui
 
 local uiCorner = Instance.new("UICorner")
@@ -43,7 +45,7 @@ uiCorner.Parent = mainFrame
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, 0, 0, 40)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "BASIC MENU"
+titleLabel.Text = "EXPLOIT MENU"
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.Font = Enum.Font.SourceSansBold
 titleLabel.TextSize = 18
@@ -90,18 +92,15 @@ local hintLabel = Instance.new("TextLabel")
 hintLabel.Size = UDim2.new(1, 0, 0, 30)
 hintLabel.Position = UDim2.new(0, 0, 1, -35)
 hintLabel.BackgroundTransparency = 1
-hintLabel.Text = "Нажми [P] для скрытия"
+hintLabel.Text = "Клавиша [P] — скрыть меню"
 hintLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
 hintLabel.Font = Enum.Font.SourceSansItalic
 hintLabel.TextSize = 12
 hintLabel.Parent = mainFrame
 
--- ЛОГИКА ФУНКЦИЙ
 speedInput.FocusLost:Connect(function()
 	local numericValue = tonumber(speedInput.Text:match("%d+"))
-	if numericValue then
-		flySpeed = numericValue
-	end
+	if numericValue then flySpeed = numericValue end
 	speedInput.Text = "Speed: " .. tostring(flySpeed)
 end)
 
@@ -168,5 +167,3 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 	if input.KeyCode == Enum.KeyCode.P then mainFrame.Visible = not mainFrame.Visible end
 end)
-
-print("[Menu Script]: Успешно запущен!")
