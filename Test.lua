@@ -7,23 +7,27 @@ local localPlayer = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
 -- ============================================================================
--- НАСТРОЙКИ (Вы можете менять эти значения)
+-- НАСТРОЙКИ
 -- ============================================================================
 local SETTINGS = {
-	AimEnabled = true,          -- Включить/выключить автоприцеливание
-	EspEnabled = true,          -- Включить/выключить подсветку игроков
+	AimEnabled = true,          -- Включить прицеливание по умолчанию
+	EspEnabled = true,          -- Включить ESP по умолчанию
 	
-	FovRadius = 150,            -- Размер зоны захвата в пикселях (радиус аима)
+	FovRadius = 250,            -- Радиус захвата цели (в пикселях)
 	
-	AllyColor = Color3.fromRGB(0, 255, 0),   -- Цвет союзников (Зеленый)
-	EnemyColor = Color3.fromRGB(255, 0, 0),  -- Цвет врагов (Красный)
+	AllyColor = Color3.fromRGB(0, 255, 0),   -- Зеленый для своих
+	EnemyColor = Color3.fromRGB(255, 0, 0),  -- Красный для врагов
+	
+	-- Клавиши для переключения функций во время игры:
+	ToggleAimKey = Enum.KeyCode.K, -- Нажмите K чтобы включить/выключить Аим
+	ToggleEspKey = Enum.KeyCode.H, -- Нажмите H чтобы включить/выключить ESP
 }
 
 local isAiming = false
 local currentTarget = nil
 
 -- ============================================================================
--- ПРОВЕРКА ВИДИМОСТИ (RAYCASTING ЧЕРЕЗ СТЕНЫ)
+-- ПРОВЕРКА ЧЕРЕЗ СТЕНЫ (RAYCASTING)
 -- ============================================================================
 local function isVisible(targetHead)
 	if not targetHead then return false end
@@ -32,24 +36,25 @@ local function isVisible(targetHead)
 	local direction = targetHead.Position - origin
 	
 	local raycastParams = RaycastParams.new()
-	-- Игнорируем персонажа самого игрока при проверке луча
 	if localPlayer.Character then
-		raycastParams.FilterDescendantsInstances = {localPlayer.Character}
+		-- Игнорируем себя, аксессуары и инструменты при проверке луча
+		raycastParams.FilterDescendantsInstances = {localPlayer.Character, camera}
 		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	end
 	
 	local raycastResult = Workspace:Raycast(origin, direction, raycastParams)
 	
-	-- Если луч ни обо что не ударился или попал прямо в деталь персонажа цели
 	if raycastResult then
+		-- Если луч уперся в объект, проверяем, принадлежит ли он целевому персонажу
 		return raycastResult.Instance:IsDescendantOf(targetHead.Parent)
 	end
 	
-	return false
+	-- Если на пути вообще ничего нет (чистое небо)
+	return true
 end
 
 -- ============================================================================
--- ПОИСК БЛИЖАЙШЕЙ ГОЛОВЫ В ЗОНЕ FOV
+-- ПОИСК БЛИЖАЙШЕЙ ЦЕЛИ
 -- ============================================================================
 local function getClosestHeadInFov()
 	local closestHead = nil
@@ -61,23 +66,26 @@ local function getClosestHeadInFov()
 			local head = character.Head
 			local human = character:FindFirstChildOfClass("Humanoid")
 			
-			-- Проверяем, что игрок жив и это не союзник по команде (если команды настроены)
 			if human and human.Health > 0 then
-				local isAlly = (player.Team == localPlayer.Team) and (localPlayer.Team ~= nil)
+				-- Исправление: Если команд нет, то игрок всегда ВРАГ
+				local isAlly = false
+				if localPlayer.Team and player.Team then
+					isAlly = (player.Team == localPlayer.Team)
+				end
 				
-				-- Переводим 3D координаты головы в 2D координаты экрана
-				local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
-				
-				if onScreen then
-					-- Считаем расстояние от центра экрана до головы игрока
-					local mousePos = UserInputService:GetMouseLocation()
-					local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+				-- Целимся только во врагов
+				if not isAlly then
+					local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
 					
-					-- Если игрок в пределах круга FOV и ближе всех остальных
-					if distance < shortestDistance then
-						if isVisible(head) then
-							shortestDistance = distance
-							closestHead = head
+					if onScreen then
+						local mousePos = UserInputService:GetMouseLocation()
+						local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+						
+						if distance < shortestDistance then
+							if isVisible(head) then
+								shortestDistance = distance
+								closestHead = head
+							end
 						end
 					end
 				end
@@ -89,18 +97,18 @@ local function getClosestHeadInFov()
 end
 
 -- ============================================================================
--- НАВЕДЕНИЕ КАМЕРЫ (LOCK-ON)
+-- НАВЕДЕНИЕ КАМЕРЫ (КАЖДЫЙ КАДР)
 -- ============================================================================
 RunService.RenderStepped:Connect(function()
 	if SETTINGS.AimEnabled and isAiming then
-		-- Если текущая цель потеряна, умерла или спряталась за стену, ищем новую
 		if not currentTarget or not currentTarget.Parent or not isVisible(currentTarget) then
 			currentTarget = getClosestHeadInFov()
 		end
 		
 		if currentTarget then
-			-- Плавно или мгновенно направляем камеру на голову цели
-			camera.CFrame = CFrame.new(camera.CFrame.Position, currentTarget.Position)
+			-- Плавное слежение за головой
+			local targetCFrame = CFrame.new(camera.CFrame.Position, currentTarget.Position)
+			camera.CFrame = camera.CFrame:Lerp(targetCFrame, 0.25) -- 0.25 обеспечивает плавность. Поставьте 1 для мгновенного наведения
 		end
 	else
 		currentTarget = nil
@@ -108,66 +116,85 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================================
--- СЛУШАТЕЛИ МЫШИ (ПКМ)
+-- ОБНОВЛЕНИЕ И ПОДДЕРЖКА ESP ПОДСВЕТКИ
+-- ============================================================================
+local function updateEsp()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= localPlayer and player.Character then
+			local character = player.Character
+			local oldHighlight = character:FindFirstChild("GameHighlight")
+			
+			if oldHighlight then 
+				oldHighlight:Destroy() 
+			end
+			
+			if SETTINGS.EspEnabled then
+				local highlight = Instance.new("Highlight")
+				highlight.Name = "GameHighlight"
+				highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+				highlight.FillOpacity = 0.3
+				highlight.OutlineOpacity = 1
+				
+				-- Проверка на союзника для цвета
+				local isAlly = false
+				if localPlayer.Team and player.Team then
+					isAlly = (player.Team == localPlayer.Team)
+				end
+				
+				local color = isAlly and SETTINGS.AllyColor or SETTINGS.EnemyColor
+				highlight.FillColor = color
+				highlight.OutlineColor = color
+				highlight.Parent = character
+			end
+		end
+	end
+end
+
+-- Включаем отслеживание появления новых персонажей
+local function setupPlayerEsp(player)
+	player.CharacterAdded:Connect(function()
+		task.wait(0.5) -- Ждем загрузки частей тела в Workspace
+		updateEsp()
+	end)
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+	setupPlayerEsp(player)
+end
+Players.PlayerAdded:Connect(setupPlayerEsp)
+Players.PlayerRemoving:Connect(updateEsp)
+
+-- Обновляем ESP при старте
+task.spawn(updateEsp)
+
+-- ============================================================================
+-- ОБРАБОТКА НАЖАТИЙ (КЛАВИАТУРА И МЫШЬ)
 -- ============================================================================
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
-	if input.UserInputType == Enum.UserInputType.MouseButton2 then -- Правая кнопка мыши
+	
+	-- Нажатие ПКМ (Зажать для прицеливания)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		isAiming = true
+	end
+	
+	-- Переключение Аима на кнопку K
+	if input.KeyCode == SETTINGS.ToggleAimKey then
+		SETTINGS.AimEnabled = not SETTINGS.AimEnabled
+		print("Автоприцеливание:", SETTINGS.AimEnabled and "ВКЛ" or "ВЫКЛ")
+	end
+	
+	-- Переключение ESP на кнопку H
+	if input.KeyCode == SETTINGS.ToggleEspKey then
+		SETTINGS.EspEnabled = not SETTINGS.EspEnabled
+		updateEsp()
+		print("ESP Подсветка:", SETTINGS.EspEnabled and "ВКЛ" or "ВЫКЛ")
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
+	-- Отпускание ПКМ (Прекратить прицеливание)
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		isAiming = false
 	end
 end)
-
--- ============================================================================
--- СИСТЕМА ДЛЯ ESP ПОДСВЕТКИ (HIGHLIGHTS)
--- ============================================================================
-local function applyHighlight(player)
-	if player == localPlayer then return end
-	
-	local function onCharacterAdded(character)
-		if not SETTINGS.EspEnabled then return end
-		
-		-- Ждем полной загрузки персонажа
-		task.wait(0.5) 
-		if not character:Parent then return end
-		
-		-- Удаляем старую подсветку, если она была
-		local oldHighlight = character:FindFirstChild("GameHighlight")
-		if oldHighlight then oldHighlight:Destroy() end
-		
-		-- Создаем новый Highlight
-		local highlight = Instance.new("Highlight")
-		highlight.Name = "GameHighlight"
-		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Видно сквозь стены
-		highlight.FillOpacity = 0.25
-		highlight.OutlineOpacity = 1
-		
-		-- Определяем цвет в зависимости от команды
-		local isAlly = (player.Team == localPlayer.Team) and (localPlayer.Team ~= nil)
-		if isAlly then
-			highlight.FillColor = SETTINGS.AllyColor
-			highlight.OutlineColor = SETTINGS.AllyColor
-		else
-			highlight.FillColor = SETTINGS.EnemyColor
-			highlight.OutlineColor = SETTINGS.EnemyColor
-		end
-		
-		highlight.Parent = character
-	end
-	
-	if player.Character then
-		onCharacterAdded(player.Character)
-	end
-	player.CharacterAdded:Connect(onCharacterAdded)
-end
-
--- Включаем ESP для текущих и новых игроков
-for _, player in ipairs(Players:GetPlayers()) do
-	applyHighlight(player)
-end
-Players.PlayerAdded:Connect(applyHighlight)
