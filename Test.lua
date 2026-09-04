@@ -1,203 +1,173 @@
--- ВЕРСИЯ ДЛЯ ИНЖЕКТОРОВ С КНОПКОЙ СВЕРТЫВАНИЯ
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local root = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
+local localPlayer = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
 
-player.CharacterAdded:Connect(function(newCharacter)
-	character = newCharacter
-	root = character:WaitForChild("HumanoidRootPart")
-	humanoid = character:WaitForChild("Humanoid")
-end)
-
-local flyEnabled = false
-local noclipEnabled = false
-local flySpeed = 50
-
--- Очистка старых интерфейсов перед запуском
-if CoreGui:FindFirstChild("ExploitMenuGui") then
-	CoreGui.ExploitMenuGui:Destroy()
-end
-
--- Скандинавский UI контейнер
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "ExploitMenuGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = CoreGui
-
--- ГЛАВНАЯ ПАНЕЛЬ МЕНЮ
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 200, 0, 250)
-mainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-mainFrame.BorderSizePixel = 0
-mainFrame.Active = true
-mainFrame.Draggable = true 
-mainFrame.Visible = true -- По умолчанию открыто
-mainFrame.Parent = screenGui
-
-local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 8)
-uiCorner.Parent = mainFrame
-
--- Заголовок меню
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, 0, 0, 40)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "EXPLOIT MENU"
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.Font = Enum.Font.SourceSansBold
-titleLabel.TextSize = 18
-titleLabel.Parent = mainFrame
-
--- Функция сборщика кнопок
-local function createButton(text, position, color)
-	local button = Instance.new("TextButton")
-	button.Size = UDim2.new(0, 160, 0, 35)
-	button.Position = position
-	button.BackgroundColor3 = color
-	button.BorderSizePixel = 0
-	button.Text = text
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	button.Font = Enum.Font.SourceSans
-	button.TextSize = 16
-	button.Parent = mainFrame
+-- ============================================================================
+-- НАСТРОЙКИ (Вы можете менять эти значения)
+-- ============================================================================
+local SETTINGS = {
+	AimEnabled = true,          -- Включить/выключить автоприцеливание
+	EspEnabled = true,          -- Включить/выключить подсветку игроков
 	
-	local btnCorner = Instance.new("UICorner")
-	btnCorner.CornerRadius = UDim.new(0, 6)
-	btnCorner.Parent = button
-	return button
-end
+	FovRadius = 150,            -- Размер зоны захвата в пикселях (радиус аима)
+	
+	AllyColor = Color3.fromRGB(0, 255, 0),   -- Цвет союзников (Зеленый)
+	EnemyColor = Color3.fromRGB(255, 0, 0),  -- Цвет врагов (Красный)
+}
 
-local flyBtn = createButton("Fly: OFF", UDim2.new(0, 20, 0, 50), Color3.fromRGB(60, 60, 60))
+local isAiming = false
+local currentTarget = nil
 
-local speedInput = Instance.new("TextBox")
-speedInput.Size = UDim2.new(0, 160, 0, 35)
-speedInput.Position = UDim2.new(0, 20, 0, 100)
-speedInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-speedInput.BorderSizePixel = 0
-speedInput.Text = "Speed: 50"
-speedInput.TextColor3 = Color3.fromRGB(200, 200, 200)
-speedInput.Font = Enum.Font.SourceSans
-speedInput.TextSize = 14
-speedInput.Parent = mainFrame
-
-local speedCorner = Instance.new("UICorner")
-speedCorner.CornerRadius = UDim.new(0, 6)
-speedCorner.Parent = speedInput
-
-local noclipBtn = createButton("Noclip: OFF", UDim2.new(0, 20, 0, 150), Color3.fromRGB(60, 60, 60))
-
-local hintLabel = Instance.new("TextLabel")
-hintLabel.Size = UDim2.new(1, 0, 0, 30)
-hintLabel.Position = UDim2.new(0, 0, 1, -35)
-hintLabel.BackgroundTransparency = 1
-hintLabel.Text = "Клавиша [P] или кнопка 'M'"
-hintLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-hintLabel.Font = Enum.Font.SourceSansItalic
-hintLabel.TextSize = 11
-hintLabel.Parent = mainFrame
-
-
--- ОТДЕЛЬНАЯ КНОПКА ВКЛЮЧЕНИЯ/ВЫКЛЮЧЕНИЯ (Toggle Button)
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 45, 0, 45)
-toggleButton.Position = UDim2.new(0.02, 0, 0.2, 0) -- В левом верхнем углу экрана
-toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-toggleButton.BorderSizePixel = 0
-toggleButton.Text = "M" -- Буква М (Menu)
-toggleButton.TextColor3 = Color3.fromRGB(0, 200, 255) -- Красивый голубой цвет текста
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.TextSize = 22
-toggleButton.Active = true
-toggleButton.Draggable = true -- Кнопку переключателя тоже можно двигать, если мешает
-toggleButton.Parent = screenGui
-
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(1, 0) -- Скругление 100% делает кнопку идеально круглой
-toggleCorner.Parent = toggleButton
-
--- Функция переключения видимости
-local function toggleMenu()
-	mainFrame.Visible = not mainFrame.Visible
-end
-
--- Обработка клика по кнопке "M"
-toggleButton.MouseButton1Click:Connect(toggleMenu)
-
-
--- ФУНКЦИОНАЛ ХАКОВ
-speedInput.FocusLost:Connect(function()
-	local numericValue = tonumber(speedInput.Text:match("%d+"))
-	if numericValue then flySpeed = numericValue end
-	speedInput.Text = "Speed: " .. tostring(flySpeed)
-end)
-
-local bodyVelocity, bodyGyro
-flyBtn.MouseButton1Click:Connect(function()
-	flyEnabled = not flyEnabled
-	if flyEnabled then
-		flyBtn.Text = "Fly: ON"
-		flyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
-		
-		bodyVelocity = Instance.new("BodyVelocity")
-		bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-		bodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
-		bodyVelocity.Parent = root
-		
-		bodyGyro = Instance.new("BodyGyro")
-		bodyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
-		bodyGyro.CFrame = root.CFrame
-		bodyGyro.Parent = root
-		
-		humanoid.PlatformStand = true
-	else
-		flyBtn.Text = "Fly: OFF"
-		flyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-		if bodyVelocity then bodyVelocity:Destroy() end
-		if bodyGyro then bodyGyro:Destroy() end
-		humanoid.PlatformStand = false
+-- ============================================================================
+-- ПРОВЕРКА ВИДИМОСТИ (RAYCASTING ЧЕРЕЗ СТЕНЫ)
+-- ============================================================================
+local function isVisible(targetHead)
+	if not targetHead then return false end
+	
+	local origin = camera.CFrame.Position
+	local direction = targetHead.Position - origin
+	
+	local raycastParams = RaycastParams.new()
+	-- Игнорируем персонажа самого игрока при проверке луча
+	if localPlayer.Character then
+		raycastParams.FilterDescendantsInstances = {localPlayer.Character}
+		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	end
-end)
+	
+	local raycastResult = Workspace:Raycast(origin, direction, raycastParams)
+	
+	-- Если луч ни обо что не ударился или попал прямо в деталь персонажа цели
+	if raycastResult then
+		return raycastResult.Instance:IsDescendantOf(targetHead.Parent)
+	end
+	
+	return false
+end
 
+-- ============================================================================
+-- ПОИСК БЛИЖАЙШЕЙ ГОЛОВЫ В ЗОНЕ FOV
+-- ============================================================================
+local function getClosestHeadInFov()
+	local closestHead = nil
+	local shortestDistance = SETTINGS.FovRadius
+	
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= localPlayer and player.Character and player.Character:FindFirstChild("Head") then
+			local character = player.Character
+			local head = character.Head
+			local human = character:FindFirstChildOfClass("Humanoid")
+			
+			-- Проверяем, что игрок жив и это не союзник по команде (если команды настроены)
+			if human and human.Health > 0 then
+				local isAlly = (player.Team == localPlayer.Team) and (localPlayer.Team ~= nil)
+				
+				-- Переводим 3D координаты головы в 2D координаты экрана
+				local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
+				
+				if onScreen then
+					-- Считаем расстояние от центра экрана до головы игрока
+					local mousePos = UserInputService:GetMouseLocation()
+					local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+					
+					-- Если игрок в пределах круга FOV и ближе всех остальных
+					if distance < shortestDistance then
+						if isVisible(head) then
+							shortestDistance = distance
+							closestHead = head
+						end
+					end
+				end
+			end
+		end
+	end
+	
+	return closestHead
+end
+
+-- ============================================================================
+-- НАВЕДЕНИЕ КАМЕРЫ (LOCK-ON)
+-- ============================================================================
 RunService.RenderStepped:Connect(function()
-	if flyEnabled and root and character:FindFirstChild("Humanoid") then
-		local camera = workspace.CurrentCamera
-		local moveDirection = Vector3.new(0,0,0)
-		
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDirection = moveDirection + camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection = moveDirection - camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection = moveDirection - camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection = moveDirection + camera.CFrame.RightVector end
-		
-		if bodyVelocity and bodyGyro then
-			bodyVelocity.Velocity = moveDirection.Unit * flySpeed
-			if moveDirection == Vector3.new(0,0,0) then bodyVelocity.Velocity = Vector3.new(0,0,0) end
-			bodyGyro.CFrame = camera.CFrame
+	if SETTINGS.AimEnabled and isAiming then
+		-- Если текущая цель потеряна, умерла или спряталась за стену, ищем новую
+		if not currentTarget or not currentTarget.Parent or not isVisible(currentTarget) then
+			currentTarget = getClosestHeadInFov()
 		end
+		
+		if currentTarget then
+			-- Плавно или мгновенно направляем камеру на голову цели
+			camera.CFrame = CFrame.new(camera.CFrame.Position, currentTarget.Position)
+		end
+	else
+		currentTarget = nil
 	end
 end)
 
-noclipBtn.MouseButton1Click:Connect(function()
-	noclipEnabled = not noclipEnabled
-	noclipBtn.Text = noclipEnabled and "Noclip: ON" or "Noclip: OFF"
-	noclipBtn.BackgroundColor3 = noclipEnabled and Color3.fromRGB(0, 150, 70) or Color3.fromRGB(60, 60, 60)
-end)
-
-RunService.Stepped:Connect(function()
-	if noclipEnabled and character then
-		for _, part in ipairs(character:GetDescendants()) do
-			if part:IsA("BasePart") then part.CanCollide = false end
-		end
+-- ============================================================================
+-- СЛУШАТЕЛИ МЫШИ (ПКМ)
+-- ============================================================================
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then -- Правая кнопка мыши
+		isAiming = true
 	end
 end)
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.P then toggleMenu() end
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		isAiming = false
+	end
 end)
+
+-- ============================================================================
+-- СИСТЕМА ДЛЯ ESP ПОДСВЕТКИ (HIGHLIGHTS)
+-- ============================================================================
+local function applyHighlight(player)
+	if player == localPlayer then return end
+	
+	local function onCharacterAdded(character)
+		if not SETTINGS.EspEnabled then return end
+		
+		-- Ждем полной загрузки персонажа
+		task.wait(0.5) 
+		if not character:Parent then return end
+		
+		-- Удаляем старую подсветку, если она была
+		local oldHighlight = character:FindFirstChild("GameHighlight")
+		if oldHighlight then oldHighlight:Destroy() end
+		
+		-- Создаем новый Highlight
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "GameHighlight"
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- Видно сквозь стены
+		highlight.FillOpacity = 0.25
+		highlight.OutlineOpacity = 1
+		
+		-- Определяем цвет в зависимости от команды
+		local isAlly = (player.Team == localPlayer.Team) and (localPlayer.Team ~= nil)
+		if isAlly then
+			highlight.FillColor = SETTINGS.AllyColor
+			highlight.OutlineColor = SETTINGS.AllyColor
+		else
+			highlight.FillColor = SETTINGS.EnemyColor
+			highlight.OutlineColor = SETTINGS.EnemyColor
+		end
+		
+		highlight.Parent = character
+	end
+	
+	if player.Character then
+		onCharacterAdded(player.Character)
+	end
+	player.CharacterAdded:Connect(onCharacterAdded)
+end
+
+-- Включаем ESP для текущих и новых игроков
+for _, player in ipairs(Players:GetPlayers()) do
+	applyHighlight(player)
+end
+Players.PlayerAdded:Connect(applyHighlight)
